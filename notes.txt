@@ -1,0 +1,11 @@
+GOALS:
+	>Audio Keys
+	>Keyboard brightness
+	>Screen Brightness
+	>Disable suspend
+
+	>Configure Vim 
+		>themes
+		>plugins
+
+	>Get back to work lol
