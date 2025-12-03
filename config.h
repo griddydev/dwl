@@ -25,29 +25,29 @@ static const char cursor_size[]            = "21"; /* Make sure it's a valid int
 
 /* appearance */
 // Define your Gruvbox colors with descriptive names
-//static const char gruvbox_bg[]      = "#282828"; // Gruvbox Dark background
-//static const char gruvbox_fg[]      = "#ebdbb2"; // Gruvbox Light foreground
-//static const char gruvbox_gray[]    = "#504945"; // Gruvbox Gray for borders
-//static const char gruvbox_blue[]    = "#458588"; // Gruvbox Blue for highlights
+//static const char gruvbox_bg[]      = "#282828"; //bg
+//static const char gruvbox_fg[]      = "#ebdbb2"; //bright white
+//static const char gruvbox_gray[]    = "#504945"; //idk
+//static const char gruvbox_blue[]    = "#458588"; //blue
 
 // The main color array
 //static const char *colors[][3]      = {
-//    /* fg (text)    bg (bar)   border (window) */
+    /* fg (text)    bg (bar)   border (window) */
 //    [SchemeNorm] = { gruvbox_fg, gruvbox_bg, gruvbox_gray }, // Unselected/Normal
 //    [SchemeSel]  = { gruvbox_fg, gruvbox_blue, gruvbox_blue  }, // Selected/Active
 //};
 
 static uint32_t colors[][3]                = {
 	/*               fg          bg          border    */
-	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x504945ff },
+	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x458588ff },
 	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
 	[SchemeUrg]  = { 0,          0,          0x770000ff },
 };
 
 //static uint32_t colors[][3]                = {
-//	/*               fg          bg          border    */
-//	[SchemeNorm] = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
-//	[SchemeSel]  = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+	/*               fg          bg          border    */
+//	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x504945ff },
+//	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
 //	[SchemeUrg]  = { 0,          0,          0x770000ff },
 //};
 
