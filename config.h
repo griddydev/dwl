@@ -14,19 +14,45 @@ static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will
 static const unsigned int borderpx         = 1;  /* border pixel of windows */
 static const int showbar                   = 1; /* 0 means no bar */
 static const int topbar                    = 1; /* 0 means bottom bar */
-static const char *fonts[]                 = {"monospace:size=9"};
+static const char *fonts[]                 = {"JetbrainsMono nl:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
+
+
+static const char *cursor_theme            = NULL;
+static const char cursor_size[]            = "21"; /* Make sure it's a valid integer, otherwise things will break */
+
+/* appearance */
+// Define your Gruvbox colors with descriptive names
+//static const char gruvbox_bg[]      = "#282828"; // Gruvbox Dark background
+//static const char gruvbox_fg[]      = "#ebdbb2"; // Gruvbox Light foreground
+//static const char gruvbox_gray[]    = "#504945"; // Gruvbox Gray for borders
+//static const char gruvbox_blue[]    = "#458588"; // Gruvbox Blue for highlights
+
+// The main color array
+//static const char *colors[][3]      = {
+//    /* fg (text)    bg (bar)   border (window) */
+//    [SchemeNorm] = { gruvbox_fg, gruvbox_bg, gruvbox_gray }, // Unselected/Normal
+//    [SchemeSel]  = { gruvbox_fg, gruvbox_blue, gruvbox_blue  }, // Selected/Active
+//};
+
 static uint32_t colors[][3]                = {
 	/*               fg          bg          border    */
-	[SchemeNorm] = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
-	[SchemeSel]  = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x504945ff },
+	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
 	[SchemeUrg]  = { 0,          0,          0x770000ff },
 };
 
+//static uint32_t colors[][3]                = {
+//	/*               fg          bg          border    */
+//	[SchemeNorm] = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+//	[SchemeSel]  = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+//	[SchemeUrg]  = { 0,          0,          0x770000ff },
+//};
+
 /* tagging */
-static const char *tags[] = { "", "", "", "", "", "", "", "", "" };
+static const char *tags[] = { "", "", "", "", "", "", "", "", "" };
 
 /* logging */
 static int log_level = WLR_ERROR;
@@ -59,7 +85,7 @@ static const MonitorRule monrules[] = {
 	{ "eDP-1",    0.5f,  1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
 	*/
 	/* defaults */
-	{ "eDP-1",    0.5f,  1,      1.75,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
+	{ "eDP-1",    0.5f,  1,      2.0,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
 	{ NULL,       0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
 };
 
