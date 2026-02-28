@@ -41,6 +41,7 @@
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
@@ -69,6 +70,7 @@
 #include <xcb/xcb.h>
 #include <xcb/xcb_icccm.h>
 #endif
+enum { SWIPE_LEFT, SWIPE_RIGHT, SWIPE_DOWN, SWIPE_UP };
 
 #include "util.h"
 #include "drwl.h"
@@ -106,6 +108,14 @@ typedef struct {
 	void (*func)(const Arg *);
 	const Arg arg;
 } Button;
+
+typedef struct {
+	unsigned int mod;
+	unsigned int motion;
+	unsigned int fingers_count;
+	void (*func)(const Arg *);
+	const Arg arg;
+} Gesture;
 
 typedef struct Monitor Monitor;
 typedef struct {
@@ -280,6 +290,15 @@ static void bufdataend(struct wlr_buffer *buffer);
 static Buffer *bufmon(Monitor *m);
 static void bufrelease(struct wl_listener *listener, void *data);
 static void buttonpress(struct wl_listener *listener, void *data);
+static int ongesture(struct wlr_pointer_swipe_end_event *event);
+static void swipe_begin(struct wl_listener *listener, void *data);
+static void swipe_update(struct wl_listener *listener, void *data);
+static void swipe_end(struct wl_listener *listener, void *data);
+static void pinch_begin(struct wl_listener *listener, void *data);
+static void pinch_update(struct wl_listener *listener, void *data);
+static void pinch_end(struct wl_listener *listener, void *data);
+static void hold_begin(struct wl_listener *listener, void *data);
+static void hold_end(struct wl_listener *listener, void *data);
 static void chvt(const Arg *arg);
 static void checkidleinhibitor(struct wlr_surface *exclude);
 static void cleanup(void);
@@ -420,6 +439,7 @@ static struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
 static struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
 static struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
 static struct wlr_output_power_manager_v1 *power_mgr;
+static struct wlr_pointer_gestures_v1 *pointer_gestures;
 
 static struct wlr_pointer_constraints_v1 *pointer_constraints;
 static struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
@@ -438,6 +458,7 @@ static KeyboardGroup *kb_group;
 static unsigned int cursor_mode;
 static Client *grabc;
 static int grabcx, grabcy; /* client-relative */
+static int rzcorner;
 
 static struct wlr_output_layout *output_layout;
 static struct wlr_box sgeom;
@@ -483,6 +504,10 @@ static struct wl_listener request_start_drag = {.notify = requeststartdrag};
 static struct wl_listener start_drag = {.notify = startdrag};
 static struct wl_listener new_session_lock = {.notify = locksession};
 
+static uint32_t swipe_fingers = 0;
+static double swipe_dx = 0;
+static double swipe_dy = 0;
+
 #ifdef XWAYLAND
 static void activatex11(struct wl_listener *listener, void *data);
 static void associatex11(struct wl_listener *listener, void *data);
@@ -501,6 +526,8 @@ static struct wlr_xwayland *xwayland;
 
 /* attempt to encapsulate suck into one file */
 #include "client.h"
+
+static const unsigned int abzsquare = swipe_min_threshold * swipe_min_threshold;
 
 /* function implementations */
 void
@@ -824,6 +851,174 @@ buttonpress(struct wl_listener *listener, void *data)
 	 * pointer focus that a button press has occurred */
 	wlr_seat_pointer_notify_button(seat,
 			event->time_msec, event->button, event->state);
+}
+
+void
+swipe_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_begin_event *event = data;
+
+	swipe_fingers = event->fingers;
+	// Reset swipe distance at the beginning of a swipe
+	swipe_dx = 0;
+	swipe_dy = 0;
+
+	// Forward swipe begin event to client
+	wlr_pointer_gestures_v1_send_swipe_begin(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+swipe_update(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_update_event *event = data;
+
+	swipe_fingers = event->fingers;
+	// Accumulate swipe distance
+	swipe_dx += event->dx;
+	swipe_dy += event->dy;
+
+	// Forward swipe update event to client
+	wlr_pointer_gestures_v1_send_swipe_update(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->dx,
+		event->dy
+	);
+}
+
+int
+ongesture(struct wlr_pointer_swipe_end_event *event)
+{
+	struct wlr_keyboard *keyboard;
+	uint32_t mods;
+	const Gesture *g;
+	unsigned int motion;
+	unsigned int adx = (int)round(fabs(swipe_dx));
+	unsigned int ady = (int)round(fabs(swipe_dy));
+	int handled = 0;
+
+	if (event->cancelled) {
+		return handled;
+	}
+
+	// Require absolute distance movement beyond a small thresh-hold
+	if (adx * adx + ady * ady < abzsquare) {
+		return handled;
+	}
+
+	if (adx > ady) {
+		motion = swipe_dx < 0 ? SWIPE_LEFT : SWIPE_RIGHT;
+	} else {
+		motion = swipe_dy < 0 ? SWIPE_UP : SWIPE_DOWN;
+	}
+
+	keyboard = wlr_seat_get_keyboard(seat);
+	mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+	for (g = gestures; g < END(gestures); g++) {
+		if (CLEANMASK(mods) == CLEANMASK(g->mod) &&
+			 swipe_fingers == g->fingers_count &&
+			 motion == g->motion && g->func) {
+			g->func(&g->arg);
+			handled = 1;
+		}
+	}
+	return handled;
+}
+
+void
+swipe_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_end_event *event = data;
+
+	// TODO: should we stop here if the event has been handled?
+	ongesture(event);
+
+	// Forward swipe end event to client
+	wlr_pointer_gestures_v1_send_swipe_end(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
+}
+
+void
+pinch_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_begin_event *event = data;
+
+	// Forward pinch begin event to client
+	wlr_pointer_gestures_v1_send_pinch_begin(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+pinch_update(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_update_event *event = data;
+
+	// Forward pinch update event to client
+	wlr_pointer_gestures_v1_send_pinch_update(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->dx,
+		event->dy,
+		event->scale,
+		event->rotation
+	);
+}
+
+void
+pinch_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_end_event *event = data;
+
+	// Forward pinch end event to client
+	wlr_pointer_gestures_v1_send_pinch_end(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
+}
+
+void
+hold_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_hold_begin_event *event = data;
+
+	// Forward hold begin event to client
+	wlr_pointer_gestures_v1_send_hold_begin(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+hold_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_hold_end_event *event = data;
+
+	// Forward hold end event to client
+	wlr_pointer_gestures_v1_send_hold_end(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
 }
 
 void
@@ -2208,8 +2403,27 @@ motionnotify(uint32_t time, struct wlr_input_device *device, double dx, double d
 			.width = grabc->geom.width, .height = grabc->geom.height}, 1);
 		return;
 	} else if (cursor_mode == CurResize) {
-		resize(grabc, (struct wlr_box){.x = grabc->geom.x, .y = grabc->geom.y,
-			.width = (int)round(cursor->x) - grabc->geom.x, .height = (int)round(cursor->y) - grabc->geom.y}, 1);
+		int cdx = (int)round(cursor->x) - grabcx;
+		int cdy = (int)round(cursor->y) - grabcy;
+
+		cdx = !(rzcorner & 1) && grabc->geom.width - 2 * (int)grabc->bw - cdx < 1 ? 0 : cdx;
+		cdy = !(rzcorner & 2) && grabc->geom.height - 2 * (int)grabc->bw - cdy < 1 ? 0 : cdy;
+
+		const struct wlr_box box = {
+			.x      = grabc->geom.x      + (rzcorner & 1 ? 0   :  cdx),
+			.y      = grabc->geom.y      + (rzcorner & 2 ? 0   :  cdy),
+			.width  = grabc->geom.width  + (rzcorner & 1 ? cdx : -cdx),
+			.height = grabc->geom.height + (rzcorner & 2 ? cdy : -cdy)
+		};
+		resize(grabc, box, 1);
+
+		if (!lock_cursor) {
+			grabcx += cdx;
+			grabcy += cdy;
+		} else {
+			wlr_cursor_warp_closest(cursor, NULL, grabcx, grabcy);
+		}
+
 		return;
 	}
 
@@ -2255,12 +2469,24 @@ moveresize(const Arg *arg)
 		wlr_cursor_set_xcursor(cursor, cursor_mgr, "all-scroll");
 		break;
 	case CurResize:
-		/* Doesn't work for X11 output - the next absolute motion event
-		 * returns the cursor to where it started */
-		wlr_cursor_warp_closest(cursor, NULL,
-				grabc->geom.x + grabc->geom.width,
-				grabc->geom.y + grabc->geom.height);
-		wlr_cursor_set_xcursor(cursor, cursor_mgr, "se-resize");
+		const char *cursors[] = { "nw-resize", "ne-resize", "sw-resize", "se-resize" };
+
+		rzcorner = resize_corner;
+		grabcx = (int)round(cursor->x);
+		grabcy = (int)round(cursor->y);
+
+		if (rzcorner == 4)
+			/* identify the closest corner index */
+			rzcorner = (grabcx - grabc->geom.x < grabc->geom.x + grabc->geom.width  - grabcx ? 0 : 1)
+			         + (grabcy - grabc->geom.y < grabc->geom.y + grabc->geom.height - grabcy ? 0 : 2);
+
+		if (warp_cursor) {
+			grabcx = rzcorner & 1 ? grabc->geom.x + grabc->geom.width  : grabc->geom.x;
+			grabcy = rzcorner & 2 ? grabc->geom.y + grabc->geom.height : grabc->geom.y;
+			wlr_cursor_warp_closest(cursor, NULL, grabcx, grabcy);
+		}
+
+		wlr_cursor_set_xcursor(cursor, cursor_mgr, cursors[rzcorner]);
 		break;
 	}
 }
@@ -2888,6 +3114,16 @@ setup(void)
 	virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
     wl_signal_add(&virtual_pointer_mgr->events.new_virtual_pointer,
             &new_virtual_pointer);
+
+	pointer_gestures = wlr_pointer_gestures_v1_create(dpy);
+	LISTEN_STATIC(&cursor->events.swipe_begin, swipe_begin);
+	LISTEN_STATIC(&cursor->events.swipe_update, swipe_update);
+	LISTEN_STATIC(&cursor->events.swipe_end, swipe_end);
+	LISTEN_STATIC(&cursor->events.pinch_begin, pinch_begin);
+	LISTEN_STATIC(&cursor->events.pinch_update, pinch_update);
+	LISTEN_STATIC(&cursor->events.pinch_end, pinch_end);
+	LISTEN_STATIC(&cursor->events.hold_begin, hold_begin);
+	LISTEN_STATIC(&cursor->events.hold_end, hold_end);
 
 	seat = wlr_seat_create(dpy, "seat0");
 	wl_signal_add(&seat->events.request_set_cursor, &request_cursor);

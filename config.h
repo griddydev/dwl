@@ -19,6 +19,7 @@ static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
 
+static const unsigned int swipe_min_threshold = 0;
 
 static const char *cursor_theme            = NULL;
 static const char cursor_size[]            = "21"; /* Make sure it's a valid integer, otherwise things will break */
@@ -35,14 +36,35 @@ static const char cursor_size[]            = "21"; /* Make sure it's a valid int
     /* fg (text)    bg (bar)   border (window) */
 //    [SchemeNorm] = { gruvbox_fg, gruvbox_bg, gruvbox_gray }, // Unselected/Normal
 //    [SchemeSel]  = { gruvbox_fg, gruvbox_blue, gruvbox_blue  }, // Selected/Active
+
+//gemini light
+static uint32_t colors[][3] = {
+    /* fg          bg          border    */
+    /* SchemeNorm: Text is dark gray, Bg is light cream, Border is muted gray */
+    [SchemeNorm] = { 0xebdbb2ff, 0x7c6f64ff, 0x076678ff },
+
+    /* SchemeSel: Text is light cream, Bg is Deep Blue, Border is Deep Blue */
+    [SchemeSel]  = { 0xebdbb2ff, 0x076678ff, 0x076678ff },
+
+    /* SchemeUrg: Use the Gruvbox Red for urgency */
+    [SchemeUrg]  = { 0xf9f5d7ff, 0x9d0006ff, 0x9d0006ff },
+};
+
+//Gruvbox Light
+//static uint32_t colors[][3]                = {
+//	/*               fg          bg          border    */
+//	[SchemeNorm] = { 0xebdbb2ff, 0x7c6f64ff, 0x458588ff },
+//	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
+//	[SchemeUrg]  = { 0,          0,          0x770000ff },
 //};
 
-static uint32_t colors[][3]                = {
-	/*               fg          bg          border    */
-	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x458588ff },
-	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
-	[SchemeUrg]  = { 0,          0,          0x770000ff },
-};
+//Gruvbox Dark
+//static uint32_t colors[][3]                = {
+//	/*               fg          bg          border    */
+//	[SchemeNorm] = { 0xebdbb2ff, 0x282828ff, 0x458588ff },
+//	[SchemeSel]  = { 0xebdbb2ff, 0x458588ff, 0x458588ff },
+//	[SchemeUrg]  = { 0,          0,          0x770000ff },
+//};
 
 //static uint32_t colors[][3]                = {
 	/*               fg          bg          border    */
@@ -56,6 +78,19 @@ static const char *tags[] = { "", "", "", "", "", "", "", "
 
 /* logging */
 static int log_level = WLR_ERROR;
+
+/* window resizing */
+/* resize_corner:
+ * 0: top-left
+ * 1: top-right
+ * 2: bottom-left
+ * 3: bottom-right
+ * 4: closest to the cursor
+ */
+static const int resize_corner = 3;
+static const int warp_cursor = 0;	/* 1: warp to corner, 0: don’t warp */
+static const int lock_cursor = 0;	/* 1: lock cursor, 0: don't lock */
+
 
 /* NOTE: ALWAYS keep a rule declared even if you don't use rules (e.g leave at least one example) */
 static const Rule rules[] = {
@@ -122,7 +157,7 @@ LIBINPUT_CONFIG_CLICK_METHOD_NONE
 LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS
 LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER
 */
-static const enum libinput_config_click_method click_method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+static const enum libinput_config_click_method click_method = LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER;
 
 /* You can choose between:
 LIBINPUT_CONFIG_SEND_EVENTS_ENABLED
@@ -182,7 +217,7 @@ static const Key keys[] = {
 	{ MODKEY,                                        XKB_KEY_Tab,        view,             {0} },
 	{ MODKEY,                                        XKB_KEY_q,          killclient,       {0} },
 	{ MODKEY,                                        XKB_KEY_t,          setlayout,        {.v = &layouts[0]} },
-	{ MODKEY,                                        XKB_KEY_m,          setlayout,        {.v = &layouts[2]} },
+	{ MODKEY,                                        XKB_KEY_f,          setlayout,        {.v = &layouts[2]} },
 	{ MODKEY,                                        XKB_KEY_space,      setlayout,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                     XKB_KEY_space,      togglefloating,   {0} },
 //	{ MODKEY,                                        XKB_KEY_e,          togglefullscreen, {0} },
@@ -192,7 +227,7 @@ static const Key keys[] = {
 	{ MODKEY,                                        XKB_KEY_period,     focusmon,         {.i = WLR_DIRECTION_RIGHT} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                     XKB_KEY_less,       tagmon,           {.i = WLR_DIRECTION_LEFT} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                     XKB_KEY_greater,    tagmon,           {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY,                                        XKB_KEY_f,          togglebar,        {0} },
+	{ MODKEY,                                        XKB_KEY_b,          togglebar,        {0} },
 	{ MODKEY,                                        XKB_KEY_w,          spawn,            {.v = firefoxcmd} },
 	{ MODKEY,                                        XKB_KEY_d,          spawn,            {.v = menucmd} },
 	{ MODKEY,                                        XKB_KEY_Return,     spawn,            {.v = termcmd} },
@@ -202,9 +237,9 @@ static const Key keys[] = {
     { 0, XF86XK_MonBrightnessDown,  spawn, SHCMD("brightnessctl s 10%-") },
     { 0, XF86XK_MonBrightnessUp,    spawn, SHCMD("brightnessctl s +10%") },
     /* Audio */
-    { 0, XF86XK_AudioMute,          spawn, SHCMD("pactl set-sink-mute @DEFAULT_SINK@ toggle") },
-    { 0, XF86XK_AudioLowerVolume,   spawn, SHCMD("pactl set-sink-volume @DEFAULT_SINK@ -5%") },
-    { 0, XF86XK_AudioRaiseVolume,   spawn, SHCMD("pactl set-sink-volume @DEFAULT_SINK@ +5%") },
+    { 0, XF86XK_AudioMute,          spawn, SHCMD("pamixer -t") },
+    { 0, XF86XK_AudioLowerVolume,   spawn, SHCMD("pamixer -d 5") },
+    { 0, XF86XK_AudioRaiseVolume,   spawn, SHCMD("pamixer -i 5") },
 	TAGKEYS(          XKB_KEY_1,                     XKB_KEY_exclam,                       0),
 	TAGKEYS(          XKB_KEY_2,                     XKB_KEY_at,                           1),
 	TAGKEYS(          XKB_KEY_3,                     XKB_KEY_numbersign,                   2),
@@ -233,9 +268,16 @@ static const Button buttons[] = {
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
-	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+    { ClkClient,   MODKEY|WLR_MODIFIER_SHIFT, BTN_LEFT,  moveresize,     {.ui = CurResize} },
 	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
 	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
 	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
+};
+//
+static const Gesture gestures[] = {
+	 { 0, SWIPE_LEFT, 3, shiftview, { .i = -1 } },
+	 { 0, SWIPE_RIGHT, 3, shiftview, { .i = 1 } },
+	//{ MODKEY, SWIPE_UP, 3, focusstack, {.i = 1} },
+	//{ MODKEY, SWIPE_DOWN, 3, focusstack, {.i = -1} },
 };
