@@ -40,13 +40,8 @@ static const char cursor_size[]            = "21"; /* Make sure it's a valid int
 //gemini light
 static uint32_t colors[][3] = {
     /* fg          bg          border    */
-    /* SchemeNorm: Text is dark gray, Bg is light cream, Border is muted gray */
-    [SchemeNorm] = { 0xebdbb2ff, 0x7c6f64ff, 0x076678ff },
-
-    /* SchemeSel: Text is light cream, Bg is Deep Blue, Border is Deep Blue */
-    [SchemeSel]  = { 0xebdbb2ff, 0x076678ff, 0x076678ff },
-
-    /* SchemeUrg: Use the Gruvbox Red for urgency */
+    [SchemeNorm] = { 0xebdbb2ff, 0x7c6f64ff, 0x427b58ff },
+    [SchemeSel]  = { 0xebdbb2ff, 0x427b58ff, 0x427b58ff },
     [SchemeUrg]  = { 0xf9f5d7ff, 0x9d0006ff, 0x9d0006ff },
 };
 
@@ -74,7 +69,7 @@ static uint32_t colors[][3] = {
 //};
 
 /* tagging */
-static const char *tags[] = { "", "", "", "", "", "", "", "", "" };
+static const char *tags[] = { "", "", "", "", "", "", "", "", "" };
 
 /* logging */
 static int log_level = WLR_ERROR;
